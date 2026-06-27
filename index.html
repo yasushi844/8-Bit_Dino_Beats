@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>8-Bit Dino Beats</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas" width="800" height="300"></canvas>
+        <div id="ui-layer">
+            <div id="start-screen" class="overlay">
+                <h1>8-Bit Dino Beats</h1>
+                <p>PRESS START TO PLAY</p>
+            <p>PRESS SPACE TO JUMP</p>
+            <div>
+                <button id="start-btn">START NORMAL</button>
+                <button id="hard-start-btn">START HARD</button>
+            </div>
+        </div>
+            <!-- Canvasの上に判定などを出すこともできるが、今回はCanvas内に描画する -->
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
