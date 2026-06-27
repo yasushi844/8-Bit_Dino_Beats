@@ -22,12 +22,13 @@ let SCROLL_SPEED = 350;
 
 // --- 状態管理 ---
 let audioCtx = null;
+let masterGain = null; // マスターボリュームノード
 let startTime = 0;
 let isPlaying = false;
 let isGameOver = false;
 let isHardMode = false;
-const eventTypes = ['hole', 'bird', 'stairs', 'cactus', 'single_spike', 'triple_jump'];
-let nextEventType = 'triple_jump'; // テスト用に固定
+const eventTypes = ['hole', 'bird', 'stairs', 'cactus', 'single_spike', 'triple_jump', 'cactus_bird', 'cactus_triplet'];
+let nextEventType = 'hole'; // 初期ギミックをholeにする
 let score = 0;
 let combo = 0;
 let nextBeatTime = 0;
@@ -84,7 +85,9 @@ const player = {
             this.vy = this.jumpPower;
             this.isJumping = true;
             this.jumpCount++;
+            return true; // ジャンプ成功
         }
+        return false; // ジャンプできなかった（空中など）
     },
     
     draw(ctx) {
@@ -188,6 +191,10 @@ async function startGame(hardMode = false) {
     
     if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        // マスターボリュームノードを作成して全体音量を50%に設定
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = 0.5;
+        masterGain.connect(audioCtx.destination);
     }
     
     if (audioCtx.state === 'suspended') {
@@ -301,7 +308,7 @@ function scheduleAudioAndGameEvents() {
                 obstacles.push({ scrollSpeed: SCROLL_SPEED,
                     type: 'hole',
                     x: CANVAS_WIDTH,
-                    width: 100, // 穴のサイズを滞空時間に合わせて微調整
+                    width: 131, // 2段・3段ジャンプの穴の広さと統一
                     targetHitTime: targetHitTime,
                     hit: false,
                     passed: false
@@ -335,23 +342,92 @@ function scheduleAudioAndGameEvents() {
                 });
             }
         } else if (nextEventType === 'cactus') {
-            // サボテンの予兆（ド・ミ・ソ の4分音符、1オクターブ低く）
-            if (currentBeatCount === targetBeat - 2) {
-                playCueSound(nextBeatTime, SCALE.DO / 2);
-            }
-            if (currentBeatCount === targetBeat - 1) {
-                playCueSound(nextBeatTime, SCALE.MI / 2);
-            }
-            if (currentBeatCount === targetBeat) {
-                playCueSound(nextBeatTime, SCALE.SO / 2); // 最後の「ソ」でジャンプ
-            }
+            // サボテン2個：予兆「ドレミレド」全4分音符
+            // ミ（3音目、targetBeat-2）で1個目ジャンプ、ド（5音目、targetBeat）で2個目ジャンプ
+            if (currentBeatCount === targetBeat - 4) playCueSound(nextBeatTime, SCALE.DO);
+            if (currentBeatCount === targetBeat - 3) playCueSound(nextBeatTime, SCALE.RE);
+            if (currentBeatCount === targetBeat - 2) playCueSound(nextBeatTime, SCALE.MI); // ← 1回目ジャンプ
+            if (currentBeatCount === targetBeat - 1) playCueSound(nextBeatTime, SCALE.RE);
+            if (currentBeatCount === targetBeat)     playCueSound(nextBeatTime, SCALE.DO); // ← 2回目ジャンプ
             
-            // ギミック生成は4拍前
-            if (currentBeatCount === targetBeat - 4) {
-                // サボテンの生成
+            // ギミック生成は5拍前（targetBeat-4のキュー音と同じタイミング）
+            if (currentBeatCount === targetBeat - 5) {
+                // サボテン1個目：targetBeat-2（ミのタイミング）に到達
                 obstacles.push({ scrollSpeed: SCROLL_SPEED,
                     type: 'cactus', x: CANVAS_WIDTH, width: 30,
-                    targetHitTime: nextBeatTime + (4 * BEAT_INTERVAL), hit: false, passed: false
+                    targetHitTime: nextBeatTime + (3 * BEAT_INTERVAL), hit: false, passed: false
+                });
+                // サボテン2個目：targetBeat（ドのタイミング）に到達
+                obstacles.push({ scrollSpeed: SCROLL_SPEED,
+                    type: 'cactus', x: CANVAS_WIDTH, width: 30,
+                    targetHitTime: nextBeatTime + (5 * BEAT_INTERVAL), hit: false, passed: false
+                });
+            }
+        } else if (nextEventType === 'cactus_bird') {
+            // 予兆音「ファファミミレレドド」：4分音符のうち、最初が0.75拍、残りの0.25拍で2音目が鳴る（ハネるリズム）
+            // 最後の1セット（ドド、表と裏）のタイミングで2回ジャンプ（ブロックを挟んだ連続ジャンプ）
+            if (currentBeatCount === targetBeat - 3) {
+                playCueSound(nextBeatTime, SCALE.FA);
+                playCueSound(nextBeatTime + BEAT_INTERVAL * 0.75, SCALE.FA);
+            }
+            if (currentBeatCount === targetBeat - 2) {
+                playCueSound(nextBeatTime, SCALE.MI);
+                playCueSound(nextBeatTime + BEAT_INTERVAL * 0.75, SCALE.MI);
+            }
+            if (currentBeatCount === targetBeat - 1) {
+                playCueSound(nextBeatTime, SCALE.RE);
+                playCueSound(nextBeatTime + BEAT_INTERVAL * 0.75, SCALE.RE);
+            }
+            if (currentBeatCount === targetBeat) {
+                playCueSound(nextBeatTime, SCALE.DO);
+                playCueSound(nextBeatTime + BEAT_INTERVAL * 0.75, SCALE.DO);
+            }
+            
+            // ギミック生成は 4拍前
+            if (currentBeatCount === targetBeat - 4) {
+                const baseHitTime = nextBeatTime + (4 * BEAT_INTERVAL); // ドの表（1回目ジャンプ）
+                
+                // 1. サボテン (ドの表に到達)
+                obstacles.push({ scrollSpeed: SCROLL_SPEED,
+                    type: 'cactus', x: CANVAS_WIDTH, width: 30,
+                    targetHitTime: baseHitTime, hit: false, passed: false, parentType: 'cactus_bird'
+                });
+                
+                // 2. 着地用ブロック (手前を10px、奥を20px小さく調整: width: 50, forceOffset: -20)
+                obstacles.push({ scrollSpeed: SCROLL_SPEED,
+                    type: 'stairs', step: 1, height: 65, x: CANVAS_WIDTH, width: 50,
+                    targetHitTime: baseHitTime + (0.75 * BEAT_INTERVAL), hit: true, passed: false, forceOffset: -20, parentType: 'cactus_bird'
+                });
+                
+                // 3. 高い鳥 (ドの裏 0.75拍後に到達。少し手前に移動: offsetDelay: 0.03)
+                obstacles.push({ scrollSpeed: SCROLL_SPEED,
+                    type: 'bird', high: true, offsetDelay: 0.03, x: CANVAS_WIDTH, width: 40,
+                    targetHitTime: baseHitTime + (0.75 * BEAT_INTERVAL), hit: false, passed: false, parentType: 'cactus_bird'
+                });
+            }
+        } else if (nextEventType === 'cactus_triplet') {
+            // 予兆音：「ミレドミレド」3連符x2
+            // 2セット目の3連符の最後の「ド」（targetBeat - 1 + 2/3拍の位置）でジャンプしてサボテンを避ける
+            if (currentBeatCount === targetBeat - 2) {
+                const subInterval = BEAT_INTERVAL / 3;
+                playCueSound(nextBeatTime, SCALE.MI, subInterval * 0.8);
+                playCueSound(nextBeatTime + subInterval, SCALE.RE, subInterval * 0.8);
+                playCueSound(nextBeatTime + subInterval * 2, SCALE.DO, subInterval * 0.8);
+            }
+            if (currentBeatCount === targetBeat - 1) {
+                const subInterval = BEAT_INTERVAL / 3;
+                playCueSound(nextBeatTime, SCALE.MI, subInterval * 0.8);
+                playCueSound(nextBeatTime + subInterval, SCALE.RE, subInterval * 0.8);
+                playCueSound(nextBeatTime + subInterval * 2, SCALE.DO, subInterval * 0.8); // ← ここでジャンプ
+            }
+            
+            // ギミック生成は 4拍前
+            if (currentBeatCount === targetBeat - 4) {
+                // 最後の「ド」の到達時間：targetBeatの頭から1/3拍前 (2セット目の最後のドの位置)
+                const baseHitTime = nextBeatTime + (4 * BEAT_INTERVAL) - (BEAT_INTERVAL / 3); 
+                obstacles.push({ scrollSpeed: SCROLL_SPEED,
+                    type: 'cactus', x: CANVAS_WIDTH, width: 30,
+                    targetHitTime: baseHitTime, hit: false, passed: false, parentType: 'cactus_triplet'
                 });
             }
         } else if (nextEventType === 'single_spike') {
@@ -494,26 +570,6 @@ function scheduleAudioAndGameEvents() {
                     targetHitTime: baseHitTime + (1.0 * BEAT_INTERVAL), hit: false, passed: false, forceOffset: 0
                 });
             }
-        } else if (nextEventType === 'cactus') {
-            // サボテンの予兆（ド・ミ・ソ の4分音符、1オクターブ低く）
-            if (currentBeatCount === targetBeat - 2) {
-                playCueSound(nextBeatTime, SCALE.DO / 2);
-            }
-            if (currentBeatCount === targetBeat - 1) {
-                playCueSound(nextBeatTime, SCALE.MI / 2);
-            }
-            if (currentBeatCount === targetBeat) {
-                playCueSound(nextBeatTime, SCALE.SO / 2); // 最後の「ソ」でジャンプ
-            }
-            
-            // ギミック生成は4拍前
-            if (currentBeatCount === targetBeat - 4) {
-                // サボテンの生成
-                obstacles.push({ scrollSpeed: SCROLL_SPEED,
-                    type: 'cactus', x: CANVAS_WIDTH, width: 30,
-                    targetHitTime: nextBeatTime + (4 * BEAT_INTERVAL), hit: false, passed: false
-                });
-            }
         }
 
         // 次のターゲットの決定（ジャンプするビートを過ぎたら次を決める）
@@ -528,14 +584,26 @@ function scheduleAudioAndGameEvents() {
                 targetBeat = currentBeatCount + restBeats;
                 // 休符中は予兆音が鳴らないようにダミーのイベントタイプを設定する
                 nextEventType = 'rest';
-            } else if (speedUpPhase === 1) {
-                // スピードアップ演出中（1秒間）は新しいギミックをスケジュールせず待機
             } else {
-                const randomRest = Math.floor(Math.random() * 4); // 0, 1, 2, 3
-                // 3段ジャンプは -6拍前から生成するため、最低でも +7 は必要
-                targetBeat = currentBeatCount + 7 + randomRest;
-                // 障害物の種類をランダムに決定
+                // 障害物の種類を先にランダム決定
                 nextEventType = eventTypes[Math.floor(Math.random() * eventTypes.length)];
+
+                // ランダムな余白を 0〜1拍 に減らしてテンポアップ
+                const randomRest = Math.floor(Math.random() * 2); 
+                
+                // イベントの生成タイミングに合わせて必要最低限のビート数を設定
+                let minInterval = 5;
+                if (nextEventType === 'triple_jump') {
+                    minInterval = 7; // -6拍前から生成するため
+                } else if (nextEventType === 'cactus') {
+                    minInterval = 6; // -5拍前から生成するため
+                } else if (nextEventType === 'cactus_bird') {
+                    minInterval = 5; // -4拍前から生成するため
+                } else if (nextEventType === 'cactus_triplet') {
+                    minInterval = 5; // -4拍前から生成するため
+                }
+                
+                targetBeat = currentBeatCount + minInterval + randomRest;
             }
         }
 
@@ -551,13 +619,13 @@ function playKick(time) {
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.connect(gain);
-    gain.connect(audioCtx.destination);
+    gain.connect(masterGain);
     
     osc.frequency.setValueAtTime(120, time);
     osc.frequency.exponentialRampToValueAtTime(0.01, time + 0.3);
     
-    // 今までの60%程度に下げる (0.5 -> 0.3)
-    gain.gain.setValueAtTime(0.3, time);
+    // キック音を0.5倍 (0.3 -> 0.15)
+    gain.gain.setValueAtTime(0.15, time);
     gain.gain.exponentialRampToValueAtTime(0.01, time + 0.3);
     
     osc.start(time);
@@ -570,7 +638,7 @@ function playBass(time, freq) {
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.connect(gain);
-    gain.connect(audioCtx.destination);
+    gain.connect(masterGain);
     
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(freq, time);
@@ -595,7 +663,7 @@ function playChord(time, rootFreq, type = 'major') {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.connect(gain);
-        gain.connect(audioCtx.destination);
+        gain.connect(masterGain);
         
         osc.type = 'triangle';
         osc.frequency.setValueAtTime(f, time);
@@ -610,20 +678,20 @@ function playChord(time, rootFreq, type = 'major') {
 }
 
 // 予兆音（トントントン・木琴風）
-function playCueSound(time, freq = SCALE.NORMAL) {
+function playCueSound(time, freq = SCALE.NORMAL, duration = 0.15) {
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.connect(gain);
-    gain.connect(audioCtx.destination);
+    gain.connect(masterGain);
     
     osc.type = 'triangle'; // 木琴のような丸くてアタックのある音
     osc.frequency.setValueAtTime(freq, time);
     
     gain.gain.setValueAtTime(0.4, time);
-    gain.gain.exponentialRampToValueAtTime(0.01, time + 0.15);
+    gain.gain.exponentialRampToValueAtTime(0.01, time + duration);
     
     osc.start(time);
-    osc.stop(time + 0.15);
+    osc.stop(time + duration);
 }
 
 function playJumpSound() {
@@ -631,7 +699,7 @@ function playJumpSound() {
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.connect(gain);
-    gain.connect(audioCtx.destination);
+    gain.connect(masterGain);
     
     osc.type = 'sine';
     osc.frequency.setValueAtTime(400, audioCtx.currentTime);
@@ -649,7 +717,7 @@ function playMissSound() {
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.connect(gain);
-    gain.connect(audioCtx.destination);
+    gain.connect(masterGain);
     
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(150, audioCtx.currentTime);
@@ -678,9 +746,9 @@ function handleInput(e) {
     if (e.code === 'Space') {
         e.preventDefault();
         
-        // ジャンプ
-        player.jump();
-        playJumpSound();
+        // ジャンプ（実際に飛べた場合のみ音を鳴らす）
+        const jumped = player.jump();
+        if (jumped) playJumpSound();
         
         const timeNow = audioCtx.currentTime;
         
@@ -790,7 +858,8 @@ function update(deltaTime) {
         const JUMP_DURATION = JUMP_FRAMES / 60; // 滞空時間(秒)
         
         if (obs.type === 'bird' || obs.type === 'cactus') {
-            const PEAK_TIME = JUMP_DURATION / 2;
+            const delay = obs.offsetDelay || 0;
+            const PEAK_TIME = JUMP_DURATION / 2 + delay;
             offset = (player.width / 2) - (obs.width / 2) + (PEAK_TIME * currentObsScrollSpeed);
         } else if (obs.type === 'stairs' || obs.type === 'spike') {
             const OFFSET_TIME = JUMP_DURATION * 0.75;
@@ -812,7 +881,7 @@ function update(deltaTime) {
     for (let i = 0; i < obstacles.length; i++) {
         let obs = obstacles[i];
         if (obs.type === 'stairs') {
-            const height = obs.step === 1 ? 40 : 80;
+            const height = obs.height !== undefined ? obs.height : (obs.step === 1 ? 40 : 80);
             const blockTop = GROUND_Y - height;
             const marginX = 8;
             // プレイヤーとブロックのX座標が重なっているか
@@ -841,8 +910,8 @@ function update(deltaTime) {
     // 3. プレイヤーの位置更新（床の高さを渡す）
     player.update(currentFloorY);
     
-    // 着地判定（ジャンプ状態から、一番下の地面に着地した瞬間）
-    if (wasJumping && !player.isJumping && currentFloorY === GROUND_Y) {
+    // 着地判定（地面・ブロックどちらへの着地でも即座に判定処理）
+    if (wasJumping && !player.isJumping) {
         processPendingJudgements(timeNow);
     }
     
@@ -864,13 +933,13 @@ function update(deltaTime) {
             let marginY = 8;
             
             if (obs.type === 'stairs') {
-                height = obs.step === 1 ? 40 : 80;
+                height = obs.height !== undefined ? obs.height : (obs.step === 1 ? 40 : 80);
                 y = GROUND_Y - height;
                 // ブロックの上に乗っている状態（floorYがblockTop）なら衝突無視
                 if (currentFloorY === y) continue;
             } else if (obs.type === 'bird') {
                 height = 40;
-                y = GROUND_Y - 50;
+                y = obs.high ? (GROUND_Y - 88) : (GROUND_Y - 50);
             } else if (obs.type === 'spike') {
                 height = 20;
                 y = obs.onStairs ? (GROUND_Y - 40 - height) : (GROUND_Y - height);
@@ -952,20 +1021,21 @@ function drawFrame() {
             ctx.fillRect(obs.x, GROUND_Y, obs.width, 100); // 下まで塗る
         } else if (obs.type === 'bird') {
             // 鳥の描画（空飛ぶ三角形のシルエット、少し高め）
+            const baseY = obs.high ? (GROUND_Y - 88) : (GROUND_Y - 50);
             ctx.fillStyle = '#535353';
             ctx.beginPath();
-            ctx.moveTo(obs.x, GROUND_Y - 50); // 胴体下部
-            ctx.lineTo(obs.x + obs.width, GROUND_Y - 50); // 胴体下部後方
-            ctx.lineTo(obs.x + obs.width / 2, GROUND_Y - 70); // 上の翼
+            ctx.moveTo(obs.x, baseY); // 胴体下部
+            ctx.lineTo(obs.x + obs.width, baseY); // 胴体下部後方
+            ctx.lineTo(obs.x + obs.width / 2, baseY - 20); // 上の翼
             ctx.fill();
             
             // 目
             ctx.fillStyle = '#fff';
-            ctx.fillRect(obs.x + 5, GROUND_Y - 55, 4, 4);
+            ctx.fillRect(obs.x + 5, baseY - 5, 4, 4);
         } else if (obs.type === 'stairs') {
             // 階段の描画（濃いグレーのブロック）
             ctx.fillStyle = '#666';
-            const height = obs.step === 1 ? 40 : 80;
+            const height = obs.height !== undefined ? obs.height : (obs.step === 1 ? 40 : 80);
             ctx.fillRect(obs.x, GROUND_Y - height, obs.width, height);
             
             // ブロックっぽい模様（枠線と×印）
@@ -1133,7 +1203,11 @@ function processPendingJudgements(timeNow) {
     // スコアが加算されたので、ここでSPEED UP判定を行う（3.0倍が上限）
     if (score >= nextSpeedUpScore && speedUpPhase === 0 && !isSpeedUpPending && speedMultiplier < 3.0) {
         isSpeedUpPending = true;
-        nextSpeedUpScore += 2500; // 次の目標値を2500点先に設定
+        if (nextSpeedUpScore >= 20000) {
+            nextSpeedUpScore += 5000; // 20000点以降は5000点刻み
+        } else {
+            nextSpeedUpScore += 2500; // それ未満は2500点刻み
+        }
     }
 }
 
