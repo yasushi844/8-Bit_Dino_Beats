@@ -1,7 +1,7 @@
 let BPM = 120;
 let BEAT_INTERVAL = 60 / BPM; // 1拍の長さ(秒) = 0.5s
-const TIMING_PERFECT = 0.05; // ±50ms (さらにシビアに)
-const TIMING_GOOD = 0.15;    // ±150ms
+let TIMING_PERFECT = 0.05; // ±50ms (さらにシビアに)
+let TIMING_GOOD = 0.08;    // ±80ms (さらにシビアに)
 
 const SCALE = {
     DO: 523.25,
@@ -27,8 +27,8 @@ let startTime = 0;
 let isPlaying = false;
 let isGameOver = false;
 let isHardMode = false;
-const eventTypes = ['hole', 'bird', 'stairs', 'cactus', 'single_spike', 'triple_jump', 'cactus_bird', 'cactus_triplet'];
-let nextEventType = 'hole'; // 初期ギミックをholeにする
+const eventTypes = ['hole', 'bird', 'stairs', 'cactus', 'single_spike', 'triple_jump', 'cactus_triplet'];
+let nextEventType = 'hole'; // 初期ギミック
 let score = 0;
 let combo = 0;
 let nextBeatTime = 0;
@@ -210,7 +210,7 @@ async function startGame(hardMode = false) {
     judgements = [];
     pendingJudgements = [];
     isGameOver = false;
-    nextEventType = 'hole';
+    nextEventType = eventTypes[Math.floor(Math.random() * eventTypes.length)];
     
     // エフェクト関連リセット
     isHardMode = hardMode;
@@ -308,7 +308,7 @@ function scheduleAudioAndGameEvents() {
                 obstacles.push({ scrollSpeed: SCROLL_SPEED,
                     type: 'hole',
                     x: CANVAS_WIDTH,
-                    width: 131, // 2段・3段ジャンプの穴の広さと統一
+                    width: 140, // 少し奥に伸ばす（元131、150だと早めのジャンプで落ちるため微調整）
                     targetHitTime: targetHitTime,
                     hit: false,
                     passed: false
@@ -393,15 +393,15 @@ function scheduleAudioAndGameEvents() {
                     targetHitTime: baseHitTime, hit: false, passed: false, parentType: 'cactus_bird'
                 });
                 
-                // 2. 着地用ブロック (手前を10px、奥を20px小さく調整: width: 50, forceOffset: -20)
+                // 2. 着地用ブロック (手前を10px、奥を20px小さく調整し、さらに後ろ側を10px長く: width: 60, forceOffset: -20)
                 obstacles.push({ scrollSpeed: SCROLL_SPEED,
-                    type: 'stairs', step: 1, height: 65, x: CANVAS_WIDTH, width: 50,
+                    type: 'stairs', step: 1, height: 65, x: CANVAS_WIDTH, width: 60,
                     targetHitTime: baseHitTime + (0.75 * BEAT_INTERVAL), hit: true, passed: false, forceOffset: -20, parentType: 'cactus_bird'
                 });
                 
-                // 3. 高い鳥 (ドの裏 0.75拍後に到達。少し手前に移動: offsetDelay: 0.03)
+                // 3. 高い鳥 (ドの裏 0.75拍後に到達。少し後ろに移動: offsetDelay: 0.06)
                 obstacles.push({ scrollSpeed: SCROLL_SPEED,
-                    type: 'bird', high: true, offsetDelay: 0.03, x: CANVAS_WIDTH, width: 40,
+                    type: 'bird', high: true, offsetDelay: 0.06, x: CANVAS_WIDTH, width: 40,
                     targetHitTime: baseHitTime + (0.75 * BEAT_INTERVAL), hit: false, passed: false, parentType: 'cactus_bird'
                 });
             }
@@ -460,7 +460,7 @@ function scheduleAudioAndGameEvents() {
                 // targetHitTime はリズムのジャストタイミング(baseHitTime)に設定し、
                 // 物理的な配置のズレは forceOffset で調整します。
                 obstacles.push({ scrollSpeed: SCROLL_SPEED,
-                    type: 'spike', x: CANVAS_WIDTH, width: 74,
+                    type: 'spike', x: CANVAS_WIDTH, width: 68,
                     targetHitTime: baseHitTime, hit: false, passed: false, forceOffset: 53
                 });
             }
@@ -574,18 +574,25 @@ function scheduleAudioAndGameEvents() {
 
         // 次のターゲットの決定（ジャンプするビートを過ぎたら次を決める）
         if (currentBeatCount === targetBeat) {
-            // スピードアップの予約がある場合、ここで発動させる
+            // スピードアップの予約がある場合、画面上の障害物が消えるのを待ってから発動させる
             if (isSpeedUpPending) {
-                isSpeedUpPending = false;
-                speedUpPhase = 1;
-                speedUpStartTime = audioCtx.currentTime;
-                // 次のギミックが生成されないようにターゲットを十分に遅らせる
-                const restBeats = Math.ceil(1.0 / BEAT_INTERVAL) + 4;
-                targetBeat = currentBeatCount + restBeats;
-                // 休符中は予兆音が鳴らないようにダミーのイベントタイプを設定する
-                nextEventType = 'rest';
+                if (obstacles.length > 0) {
+                    // まだ画面に障害物が残っている場合は待機（休符）
+                    targetBeat = currentBeatCount + 1; // 次のビートで再確認
+                    nextEventType = 'rest';
+                } else {
+                    // 全ての障害物が左に流れ切ったらスピードアップ発動
+                    isSpeedUpPending = false;
+                    speedUpPhase = 1;
+                    speedUpStartTime = audioCtx.currentTime;
+                    // 次のギミックが生成されないようにターゲットを十分に遅らせる
+                    const restBeats = Math.ceil(1.0 / BEAT_INTERVAL) + 4;
+                    targetBeat = currentBeatCount + restBeats;
+                    // 休符中は予兆音が鳴らないようにダミーのイベントタイプを設定する
+                    nextEventType = 'rest';
+                }
             } else {
-                // 障害物の種類を先にランダム決定
+                // 障害物の種類をランダムに決定
                 nextEventType = eventTypes[Math.floor(Math.random() * eventTypes.length)];
 
                 // ランダムな余白を 0〜1拍 に減らしてテンポアップ
@@ -828,6 +835,8 @@ function update(deltaTime) {
     
     const timeNow = audioCtx ? audioCtx.currentTime : 0;
     
+    // デバッグ用自動ジャンプは無効化されました
+    
     // エフェクト終了判定
     if (activeEffect && timeNow > effectEndTime) {
         activeEffect = null;
@@ -844,6 +853,10 @@ function update(deltaTime) {
         SCROLL_SPEED = 350 * speedMultiplier;
         player.jumpPower = -13 * speedMultiplier;
         player.gravity = 1.0 * (speedMultiplier * speedMultiplier);
+        
+        // スピードに合わせて判定幅もシビアにする（飛距離のロスを一定に保つ）
+        TIMING_PERFECT = 0.05 / speedMultiplier;
+        TIMING_GOOD = 0.08 / speedMultiplier;
     }
     
     // 1. まず全障害物の位置を計算
@@ -892,6 +905,10 @@ function update(deltaTime) {
                 }
             }
         } else if (obs.type === 'hole') {
+            // Good判定の有効期間内（かつ未判定）なら、まだジャンプする猶予があるので穴に落とさない
+            if (!obs.hit && timeNow < obs.targetHitTime + TIMING_GOOD) {
+                continue;
+            }
             // 足元が穴かどうか（プレイヤーの幅の大部分が穴の中にあるか）
             const marginX = 10;
             if (player.x + player.width - marginX > obs.x && player.x + marginX < obs.x + obs.width) {
@@ -910,10 +927,8 @@ function update(deltaTime) {
     // 3. プレイヤーの位置更新（床の高さを渡す）
     player.update(currentFloorY);
     
-    // 着地判定（地面・ブロックどちらへの着地でも即座に判定処理）
-    if (wasJumping && !player.isJumping) {
-        processPendingJudgements(timeNow);
-    }
+    // 着地判定フラグを保存
+    let justLanded = (wasJumping && !player.isJumping);
     
     // もし地面より下に落ちたら穴に落ちた判定（ゲームオーバー）
     if (player.y + player.height > GROUND_Y + 10) {
@@ -928,6 +943,9 @@ function update(deltaTime) {
         
         // 物理的な当たり判定（鳥・トゲ・ブロックの横衝突・サボテン）
         if (obs.type === 'bird' || obs.type === 'spike' || obs.type === 'stairs' || obs.type === 'cactus') {
+            // すでにタイミング判定成功(hit)しているか、またはGood判定の有効期間内の障害物（stairs以外）は衝突を免除する
+            if ((obs.hit || (!obs.passed && timeNow < obs.targetHitTime + TIMING_GOOD)) && obs.type !== 'stairs') continue;
+            
             let height, y;
             let marginX = 8;
             let marginY = 8;
@@ -965,15 +983,26 @@ function update(deltaTime) {
             }
         }
         
-        // 2. 判定漏れチェック（ジャンプせずに通り過ぎてしまった場合）
+        // 2. 判定漏れチェック（ジャンプせずに通り過ぎてしまった場合など）
         const passDelay = 0.1 + ((obs.offset || 0) / SCROLL_SPEED);
         if (!obs.hit && !obs.passed && timeNow > obs.targetHitTime + passDelay) {
             obs.passed = true;
-            // 穴は物理的に落ちるためここでのミス判定は不要
-            // 鳥や階段なども物理的なAABB判定でぶつかるため、通り過ぎたことによるミス判定は不要
+            obs.hit = true;
+            
+            // 穴以外のオブジェクトを超えてヒットしていなければ全てGOODとみなす
+            combo = 0; // GOODなのでコンボリセット
+            const bonus = getComboBonus(combo);
+            score += 50 + (bonus / 2);
+            score = Math.floor(score);
+            addJudgementPos('GOOD', '#05d9e8', player.y - 20);
         }
     }
     
+    // 着地後、MISS（ゲームオーバー）でなければジャンプ判定（GOOD/PERFECT）を出力する
+    if (justLanded && !isGameOver) {
+        processPendingJudgements(timeNow);
+    }
+
     // 画面外に出た障害物を消す
     obstacles = obstacles.filter(obs => obs.x + obs.width > 0);
     
@@ -1012,13 +1041,14 @@ function drawFrame() {
     // 障害物（落とし穴）の描画
     for (let obs of obstacles) {
         if (obs.type === 'hole') {
+            const offset = 15;
             // 地面に穴をあける表現（白で塗って、下に模様をつける）
             ctx.fillStyle = '#f7f7f7'; // 背景色と同じにして線を消す
-            ctx.fillRect(obs.x, GROUND_Y - 2, obs.width, 4);
+            ctx.fillRect(obs.x + offset, GROUND_Y - 2, obs.width - offset, 4);
             
             // 穴の中
             ctx.fillStyle = '#333';
-            ctx.fillRect(obs.x, GROUND_Y, obs.width, 100); // 下まで塗る
+            ctx.fillRect(obs.x + offset, GROUND_Y, obs.width - offset, 100); // 下まで塗る
         } else if (obs.type === 'bird') {
             // 鳥の描画（空飛ぶ三角形のシルエット、少し高め）
             const baseY = obs.high ? (GROUND_Y - 88) : (GROUND_Y - 50);
