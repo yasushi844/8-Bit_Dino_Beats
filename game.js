@@ -23,6 +23,7 @@ let SCROLL_SPEED = 350;
 // --- 状態管理 ---
 let audioCtx = null;
 let masterGain = null; // マスターボリュームノード
+let scheduleTimeout = null; // スケジュールタイムアウトID（キャンセル用）
 let startTime = 0;
 let isPlaying = false;
 let isGameOver = false;
@@ -187,6 +188,12 @@ async function startGame(hardMode = false) {
     // プレイ中にキー操作でボタンが誤爆しないように、ボタンのフォーカスを外す
     if (document.activeElement) {
         document.activeElement.blur();
+    }
+    
+    // 古いスケジュールタイムアウトがあればキャンセルして混入を防ぐ
+    if (scheduleTimeout) {
+        clearTimeout(scheduleTimeout);
+        scheduleTimeout = null;
     }
     
     if (!audioCtx) {
@@ -620,7 +627,7 @@ function scheduleAudioAndGameEvents() {
         currentBeatCount++;
     }
     
-    setTimeout(scheduleAudioAndGameEvents, lookahead * 1000);
+    scheduleTimeout = setTimeout(scheduleAudioAndGameEvents, lookahead * 1000);
 }
 
 // ドラム音
