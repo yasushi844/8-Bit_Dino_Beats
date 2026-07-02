@@ -25,6 +25,7 @@ let audioCtx = null;
 let masterGain = null; // マスターボリュームノード
 let scheduleTimeout = null; // スケジュールタイムアウトID（キャンセル用）
 let isPaused = false; // ポーズ状態フラグ
+let jumpBufferTime = 0; // ジャンプ先行入力用バッファ時間 (audioCtx.currentTime)
 let startTime = 0;
 let isPlaying = false;
 let isGameOver = false;
@@ -235,6 +236,7 @@ async function startGame(hardMode = false) {
     isGameOver = false;
     nextEventType = 'hole'; // 最初のギミックは確実に4拍で間に合う'hole'に固定（バグ防止）
     isPaused = false;
+    jumpBufferTime = 0; // 先行入力リセット
     
     // エフェクト関連リセット
     isHardMode = hardMode;
@@ -783,9 +785,13 @@ function handleInput(e) {
     if (e.code === 'Space') {
         e.preventDefault();
         
-        // ジャンプ（実際に飛べた場合のみ音を鳴らす）
+        // ジャンプ（実際に飛べた場合のみ音を鳴らす、飛べない時は先行入力バッファに記憶）
         const jumped = player.jump();
-        if (jumped) playJumpSound();
+        if (jumped) {
+            playJumpSound();
+        } else {
+            jumpBufferTime = audioCtx.currentTime;
+        }
         
         const timeNow = audioCtx.currentTime;
         
@@ -934,7 +940,10 @@ function update(deltaTime) {
             // プレイヤーとブロックのX座標が重なっているか
             if (player.x + player.width - marginX > obs.x && player.x + marginX < obs.x + obs.width) {
                 // プレイヤーの足がブロックの上面以上（少し食い込むのも許容）なら乗れる
-                if (player.y + player.height <= blockTop + 20) {
+                // deltaTime を考慮しためり込み量（最高落下速度）に合わせて判定範囲を緩和
+                const dt = deltaTime * 60;
+                const maxSinking = Math.max(20, player.vy * dt + 5);
+                if (player.y + player.height <= blockTop + maxSinking) {
                     currentFloorY = blockTop;
                 }
             }
@@ -963,6 +972,14 @@ function update(deltaTime) {
     
     // 着地判定フラグを保存
     let justLanded = (wasJumping && !player.isJumping);
+    
+    // 着地した瞬間、もし先行入力（150ms以内）があれば自動ジャンプ
+    if (justLanded && (timeNow - jumpBufferTime < 0.15)) {
+        player.jump();
+        playJumpSound();
+        jumpBufferTime = 0; // バッファクリア
+        justLanded = false; // 再び空中に飛び立ったため、今回のフレームでの着地処理(判定)はスキップ
+    }
     
     // もし地面より下に落ちたら穴に落ちた判定（ゲームオーバー）
     if (player.y + player.height > GROUND_Y + 10) {
