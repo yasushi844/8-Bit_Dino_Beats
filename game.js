@@ -678,8 +678,8 @@ function playBass(time, freq) {
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(freq, time);
     
-    // 音ゲーの邪魔にならないよう音量は控えめに (60%に下げる: 0.04 -> 0.024)
-    gain.gain.setValueAtTime(0.024, time);
+    // BGMベース音の音量を3倍に変更 (0.024 -> 0.072)
+    gain.gain.setValueAtTime(0.072, time);
     gain.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
     
     osc.start(time);
@@ -703,8 +703,8 @@ function playChord(time, rootFreq, type = 'major') {
         osc.type = 'triangle';
         osc.frequency.setValueAtTime(f, time);
         
-        // 音量はさらに控えめに（和音なので3つ重なる）(60%に下げる: 0.015 -> 0.009)
-        gain.gain.setValueAtTime(0.009, time);
+        // BGM和音の音量を3倍に変更 (0.009 -> 0.027)
+        gain.gain.setValueAtTime(0.027, time);
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
         
         osc.start(time);
