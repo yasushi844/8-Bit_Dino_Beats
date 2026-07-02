@@ -68,9 +68,10 @@ const player = {
     jumpCount: 0,
     color: '#535353',
     
-    update(floorY = GROUND_Y) {
-        this.y += this.vy;
-        this.vy += this.gravity;
+    update(floorY = GROUND_Y, deltaTime = 1/60) {
+        const dt = deltaTime * 60; // 60fps基準に正規化してフレームレートに依存しないようにする
+        this.y += this.vy * dt;
+        this.vy += this.gravity * dt;
         
         // 指定された床（地面またはブロック）に着地
         if (this.y >= floorY - this.height) {
@@ -838,7 +839,7 @@ function isColliding(rect1, rect2, marginX = 8, marginY = 8) {
 function update(deltaTime) {
     if (isGameOver) {
         // ゲームオーバー後もプレイヤーの落下アニメーションだけは続ける
-        player.update(CANVAS_HEIGHT + 200);
+        player.update(CANVAS_HEIGHT + 200, deltaTime);
         return;
     }
     
@@ -934,7 +935,7 @@ function update(deltaTime) {
     }
     
     // 3. プレイヤーの位置更新（床の高さを渡す）
-    player.update(currentFloorY);
+    player.update(currentFloorY, deltaTime);
     
     // 着地判定フラグを保存
     let justLanded = (wasJumping && !player.isJumping);
