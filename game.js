@@ -892,7 +892,7 @@ function update(deltaTime) {
         BEAT_INTERVAL = 60 / BPM;
         SCROLL_SPEED = 350 * speedMultiplier;
         player.jumpPower = -13 * speedMultiplier;
-        player.gravity = 1.0 * speedMultiplier;
+        player.gravity = 1.0 * (speedMultiplier * speedMultiplier);
         
         // スピードに合わせて判定幅もシビアにする（飛距離のロスを一定に保つ）
         TIMING_PERFECT = 0.05 / speedMultiplier;
