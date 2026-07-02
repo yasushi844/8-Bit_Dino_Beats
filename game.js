@@ -232,6 +232,8 @@ async function startGame(hardMode = false) {
     nextSpeedUpScore = 2500;
     speedMultiplier = 1.0;
     isSpeedUpPending = false;
+    TIMING_PERFECT = 0.05; // リセット
+    TIMING_GOOD = 0.08;    // リセット
     
     // プレイヤーの初期化
     player.gravity = 1.0;
@@ -852,7 +854,7 @@ function update(deltaTime) {
         BEAT_INTERVAL = 60 / BPM;
         SCROLL_SPEED = 350 * speedMultiplier;
         player.jumpPower = -13 * speedMultiplier;
-        player.gravity = 1.0 * (speedMultiplier * speedMultiplier);
+        player.gravity = 1.0 * speedMultiplier;
         
         // スピードに合わせて判定幅もシビアにする（飛距離のロスを一定に保つ）
         TIMING_PERFECT = 0.05 / speedMultiplier;
