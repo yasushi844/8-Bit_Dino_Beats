@@ -24,6 +24,7 @@ let SCROLL_SPEED = 350;
 let audioCtx = null;
 let masterGain = null; // マスターボリュームノード
 let scheduleTimeout = null; // スケジュールタイムアウトID（キャンセル用）
+let isPaused = false; // ポーズ状態フラグ
 let startTime = 0;
 let isPlaying = false;
 let isGameOver = false;
@@ -153,6 +154,20 @@ function init() {
     document.getElementById('hard-start-btn').addEventListener('click', () => startGame(true));
     window.addEventListener('keydown', handleInput);
     
+    // タブ切り替え（バックグラウンド移行）時の自動ポーズ
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden && isPlaying && !isGameOver && !isPaused) {
+            pauseGame();
+        }
+    });
+    
+    // ポーズ解除用の画面クリック
+    window.addEventListener('click', () => {
+        if (isPaused) {
+            resumeGame();
+        }
+    });
+    
     // 初期描画
     drawFrame();
 }
@@ -218,7 +233,8 @@ async function startGame(hardMode = false) {
     judgements = [];
     pendingJudgements = [];
     isGameOver = false;
-    nextEventType = eventTypes[Math.floor(Math.random() * eventTypes.length)];
+    nextEventType = 'hole'; // 最初のギミックは確実に4拍で間に合う'hole'に固定（バグ防止）
+    isPaused = false;
     
     // エフェクト関連リセット
     isHardMode = hardMode;
@@ -749,6 +765,10 @@ function playMissSound() {
 
 // --- 入力と判定 ---
 function handleInput(e) {
+    if (isPaused) {
+        resumeGame();
+        return;
+    }
     if (isGameOver) {
         if (e.code === 'Enter') {
             e.preventDefault(); // デフォルト動作を防ぐ
@@ -819,6 +839,7 @@ function gameOver() {
 let lastTime = 0;
 
 function gameLoop(timestamp) {
+    if (isPaused) return; // ポーズ中は更新と描画のループを行わない
     if (!lastTime) lastTime = timestamp;
     const deltaTime = (timestamp - lastTime) / 1000; // 秒
     lastTime = timestamp;
@@ -1198,6 +1219,19 @@ function drawFrame() {
         ctx.font = '14px "Press Start 2P"';
         ctx.fillText('PRESS ENTER TO RETURN TO TITLE', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 60);
     }
+    
+    // 一時停止（ポーズ）表示
+    if (isPaused) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.font = '30px "Press Start 2P"';
+        ctx.fillText('PAUSED', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 - 20);
+        ctx.font = '12px "Press Start 2P"';
+        ctx.fillText('CLICK SCREEN OR PRESS ANY KEY TO RESUME', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 20);
+    }
 }
 
 function getComboBonus(currentCombo) {
@@ -1261,6 +1295,25 @@ function addJudgementPos(text, color, yPos) {
         alpha: 1.0,
         life: 60 // フレーム数
     });
+}
+
+// 一時停止処理
+function pauseGame() {
+    isPaused = true;
+    if (audioCtx && audioCtx.state === 'running') {
+        audioCtx.suspend();
+    }
+    drawFrame();
+}
+
+// 一時停止解除処理
+function resumeGame() {
+    isPaused = false;
+    lastTime = 0; // ループ再開時のdeltaTime急増を防ぐ
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    animationId = requestAnimationFrame(gameLoop);
 }
 
 // 起動
