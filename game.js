@@ -659,8 +659,8 @@ function playKick(time) {
     osc.frequency.setValueAtTime(120, time);
     osc.frequency.exponentialRampToValueAtTime(0.01, time + 0.3);
     
-    // キック音を0.5倍 (0.3 -> 0.15)
-    gain.gain.setValueAtTime(0.15, time);
+    // キック音を1.5倍 (0.15 -> 0.225)
+    gain.gain.setValueAtTime(0.225, time);
     gain.gain.exponentialRampToValueAtTime(0.01, time + 0.3);
     
     osc.start(time);
