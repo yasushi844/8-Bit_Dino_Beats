@@ -810,6 +810,9 @@ function gameOver() {
     isPlaying = false;
     playMissSound();
     player.color = '#ff0000'; // やられ色
+    judgements = []; // すでに表示されているジャンプ成功判定（PERFECT!など）を消去
+    pendingJudgements = []; // 保留中の判定もクリア
+    addJudgement('MISS...', '#555');
 }
 
 // --- メインループ ---
@@ -943,7 +946,6 @@ function update(deltaTime) {
     // もし地面より下に落ちたら穴に落ちた判定（ゲームオーバー）
     if (player.y + player.height > GROUND_Y + 10) {
         combo = 0;
-        addJudgement('MISS...', '#555');
         gameOver();
     }
     
@@ -988,7 +990,6 @@ function update(deltaTime) {
                 // ただし、もしhit済みの場合は二重にMiss判定処理などを呼ばないようにする工夫も可能だが
                 // gameOverになるので同じこと
                 combo = 0;
-                addJudgement('MISS...', '#555');
                 gameOver();
             }
         }
